@@ -10,6 +10,8 @@ use App\Models\ApplicationPreview;
 use App\Traits\AuditsApplicationSettings;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
 class Previews extends Component
@@ -23,6 +25,8 @@ class Previews extends Component
     public bool $isPreviewDeploymentsEnabled = false;
 
     public bool $isPrDeploymentsPublicEnabled = false;
+
+    public ?string $previewDeploymentsLimit = null;
 
     public string $deployment_uuid;
 
@@ -48,6 +52,9 @@ class Previews extends Component
     {
         $this->isPreviewDeploymentsEnabled = $this->application->settings->is_preview_deployments_enabled;
         $this->isPrDeploymentsPublicEnabled = $this->application->settings->is_pr_deployments_public_enabled ?? false;
+        $this->previewDeploymentsLimit = $this->application->settings->preview_deployments_limit === null
+            ? null
+            : (string) $this->application->settings->preview_deployments_limit;
         $this->pull_requests = collect();
         $this->parameters = get_route_parameters();
         $this->syncDockerTags();
@@ -67,6 +74,31 @@ class Previews extends Component
 
         $this->dispatch('success', 'Settings saved.');
         $this->dispatch('configurationChanged');
+    }
+
+    public function savePreviewDeploymentsLimit()
+    {
+        try {
+            $this->authorize('update', $this->application);
+
+            $validated = Validator::make(
+                ['previewDeploymentsLimit' => blank($this->previewDeploymentsLimit) ? null : $this->previewDeploymentsLimit],
+                ['previewDeploymentsLimit' => ['nullable', 'integer', 'min:1', 'max:'.MAX_PREVIEW_DEPLOYMENTS_LIMIT]],
+                [],
+                ['previewDeploymentsLimit' => 'preview deployments limit']
+            )->validate();
+
+            $this->application->settings->preview_deployments_limit = $validated['previewDeploymentsLimit'] === null
+                ? null
+                : (int) $validated['previewDeploymentsLimit'];
+            $this->saveApplicationSettingsWithAudit($this->application);
+
+            $this->dispatch('success', 'Preview deployments limit updated.');
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            return handleError($e, $this);
+        }
     }
 
     public function togglePreviewDeployments(): void
@@ -135,6 +167,11 @@ class Previews extends Component
     {
         try {
             $this->authorize('update', $this->application);
+            if ($this->hasReachedPreviewDeploymentsLimitFor($pull_request_id)) {
+                $this->dispatch('error', $this->application->previewDeploymentsLimitReachedMessage());
+
+                return;
+            }
             if ($this->application->build_pack === 'dockercompose') {
                 $this->setDeploymentUuid();
                 $found = ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', $pull_request_id)->first();
@@ -200,6 +237,12 @@ class Previews extends Component
             $this->authorize('deploy', $this->application);
             $this->authorize('update', $this->application);
 
+            if ($this->hasReachedPreviewDeploymentsLimitFor($pull_request_id)) {
+                $this->dispatch('error', $this->application->previewDeploymentsLimitReachedMessage());
+
+                return;
+            }
+
             $this->add($pull_request_id, $pull_request_html_url, $docker_registry_image_tag);
             $this->deploy($pull_request_id, $pull_request_html_url, force_rebuild: false, docker_registry_image_tag: $docker_registry_image_tag);
         } catch (\Throwable $e) {
@@ -211,6 +254,11 @@ class Previews extends Component
     {
         try {
             $this->authorize('deploy', $this->application);
+            if ($this->hasReachedPreviewDeploymentsLimitFor($pull_request_id)) {
+                $this->dispatch('error', $this->application->previewDeploymentsLimitReachedMessage());
+
+                return;
+            }
             $this->setDeploymentUuid();
             $found = ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', $pull_request_id)->first();
             if (! $found && (! is_null($pull_request_html_url) || ($this->application->build_pack === 'dockerimage' && str($docker_registry_image_tag)->isNotEmpty()))) {
@@ -255,6 +303,15 @@ class Previews extends Component
         } catch (\Throwable $e) {
             return handleError($e, $this);
         }
+    }
+
+    private function hasReachedPreviewDeploymentsLimitFor(int $pullRequestId): bool
+    {
+        if ($this->application->previews()->where('pull_request_id', $pullRequestId)->exists()) {
+            return false;
+        }
+
+        return $this->application->hasReachedPreviewDeploymentsLimit();
     }
 
     private function saveDockerTagWithAudit(ApplicationPreview $preview, string $dockerRegistryImageTag): void

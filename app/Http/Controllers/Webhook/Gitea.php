@@ -293,6 +293,16 @@ class Gitea extends Controller
                             ->where('pull_request_id', $pull_request_id)
                             ->first();
 
+                        if (! $found && $application->hasReachedPreviewDeploymentsLimit()) {
+                            $return_payloads->push([
+                                'application' => $application->name,
+                                'status' => 'skipped',
+                                'message' => $application->previewDeploymentsLimitReachedMessage(),
+                            ]);
+
+                            continue;
+                        }
+
                         if (! $found) {
                             if ($application->build_pack === 'dockercompose') {
                                 $pr_app = ApplicationPreview::create([
@@ -560,6 +570,16 @@ class Gitea extends Controller
                             }
                             $deployment_uuid = new_public_id();
                             $found = ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', $pull_request_id)->first();
+                            if (! $found && $application->hasReachedPreviewDeploymentsLimit()) {
+                                $return_payloads->push([
+                                    'application' => $application->name,
+                                    'status' => 'skipped',
+                                    'message' => $application->previewDeploymentsLimitReachedMessage(),
+                                ]);
+
+                                continue;
+                            }
+
                             if (! $found) {
                                 if ($application->build_pack === 'dockercompose') {
                                     $pr_app = ApplicationPreview::create([

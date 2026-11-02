@@ -132,6 +132,9 @@ class ApplicationPreviewsController extends Controller
             new OA\Response(response: 400, ref: '#/components/responses/400'),
             new OA\Response(response: 401, ref: '#/components/responses/401'),
             new OA\Response(response: 404, ref: '#/components/responses/404'),
+            new OA\Response(response: 409, description: 'Preview deployments limit of the application is reached.', content: new OA\JsonContent(
+                properties: [new OA\Property(property: 'message', type: 'string')],
+            )),
             new OA\Response(response: 422, ref: '#/components/responses/422'),
             new OA\Response(response: 429, description: 'Deployment queue is full.'),
         ],
@@ -226,6 +229,10 @@ class ApplicationPreviewsController extends Controller
         }
 
         $created = ! $preview;
+        if ($created && $application->hasReachedPreviewDeploymentsLimit()) {
+            return response()->json(['message' => $application->previewDeploymentsLimitReachedMessage()], 409);
+        }
+
         if ($created) {
             $isCompose = $application->build_pack === BuildPackTypes::DOCKERCOMPOSE->value;
             $preview = ApplicationPreview::create([

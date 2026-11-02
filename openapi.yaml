@@ -106,6 +106,14 @@ paths:
           $ref: '#/components/responses/401'
         '404':
           $ref: '#/components/responses/404'
+        '409':
+          description: 'Preview deployments limit of the application is reached.'
+          content:
+            application/json:
+              schema:
+                properties:
+                  message: { type: string }
+                type: object
         '422':
           $ref: '#/components/responses/422'
         '429':
@@ -555,6 +563,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -991,6 +1005,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -1427,6 +1447,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -1800,6 +1826,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -2159,6 +2191,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -2695,6 +2733,12 @@ paths:
                 is_pr_deployments_public_enabled:
                   type: boolean
                   description: 'Make pull request deployments public.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -17472,6 +17516,10 @@ components:
           type: boolean
         is_pr_deployments_public_enabled:
           type: boolean
+        preview_deployments_limit:
+          type: integer
+          nullable: true
+          description: 'Maximum number of preview deployments that can exist at the same time. Null means no limit.'
         use_build_secrets:
           type: boolean
         redact_all_env_values_in_logs:

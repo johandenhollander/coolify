@@ -175,3 +175,64 @@ it('saves the docker tag of the remaining preview after another preview is delet
 
     expect($previewB->fresh()->docker_registry_image_tag)->toBe('tag-b');
 });
+
+it('saves the preview deployments limit and clears it when the field is empty', function () {
+    Livewire::test(Previews::class, ['application' => $this->application])
+        ->assertSee('Preview deployments limit')
+        ->assertSet('previewDeploymentsLimit', null)
+        ->set('previewDeploymentsLimit', '3')
+        ->call('savePreviewDeploymentsLimit')
+        ->assertHasNoErrors()
+        ->assertDispatched('success');
+
+    expect($this->application->fresh()->settings->preview_deployments_limit)->toBe(3);
+
+    Livewire::test(Previews::class, ['application' => $this->application->fresh()])
+        ->assertSet('previewDeploymentsLimit', '3')
+        ->set('previewDeploymentsLimit', '')
+        ->call('savePreviewDeploymentsLimit')
+        ->assertHasNoErrors();
+
+    expect($this->application->fresh()->settings->preview_deployments_limit)->toBeNull();
+});
+
+it('validates the preview deployments limit', function (string $value) {
+    Livewire::test(Previews::class, ['application' => $this->application])
+        ->set('previewDeploymentsLimit', $value)
+        ->call('savePreviewDeploymentsLimit')
+        ->assertHasErrors('previewDeploymentsLimit');
+
+    expect($this->application->fresh()->settings->preview_deployments_limit)->toBeNull();
+})->with([
+    'zero' => '0',
+    'negative' => '-1',
+    'above maximum' => '1001',
+    'not a number' => 'abc',
+]);
+
+it('does not let a team member change the preview deployments limit', function () {
+    $member = User::factory()->create();
+    $this->team->members()->attach($member->id, ['role' => 'member']);
+    $this->actingAs($member);
+
+    Livewire::test(Previews::class, ['application' => $this->application])
+        ->set('previewDeploymentsLimit', '2')
+        ->call('savePreviewDeploymentsLimit');
+
+    expect($this->application->fresh()->settings->preview_deployments_limit)->toBeNull();
+});
+
+it('does not add a preview from the UI when the preview deployments limit is reached', function () {
+    $this->application->update(['build_pack' => 'dockerimage']);
+    $this->application->settings()->update(['preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $this->application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'docker_registry_image_tag' => 'tag-a']);
+    Queue::fake();
+
+    Livewire::test(Previews::class, ['application' => $this->application->fresh()])
+        ->call('add', 42, null, 'pr-42')
+        ->assertDispatched('error')
+        ->call('add_and_deploy', 42, null, 'pr-42')
+        ->assertDispatched('error');
+
+    expect(ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
+});

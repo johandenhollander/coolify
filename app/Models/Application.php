@@ -1463,6 +1463,28 @@ class Application extends BaseModel
         return false;
     }
 
+    /**
+     * Whether a new preview deployment would exceed the preview deployments limit.
+     * Existing previews keep deploying; the limit only blocks new pull requests.
+     */
+    public function hasReachedPreviewDeploymentsLimit(): bool
+    {
+        $limit = $this->settings->preview_deployments_limit;
+
+        if (is_null($limit)) {
+            return false;
+        }
+
+        return $this->previews()->count() >= $limit;
+    }
+
+    public function previewDeploymentsLimitReachedMessage(): string
+    {
+        $limit = $this->settings->preview_deployments_limit;
+
+        return "Preview deployments limit reached ({$limit}). Close a pull request, remove a preview, or raise the limit to deploy a preview for this pull request.";
+    }
+
     public function deploymentType()
     {
         $privateKeyId = data_get($this, 'private_key_id');

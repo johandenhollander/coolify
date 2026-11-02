@@ -267,6 +267,7 @@ function sharedDataApplications(?Application $application = null): array
         'max_restart_count' => 'integer|min:0',
         'stop_grace_period' => 'nullable|integer|min:'.MIN_STOP_GRACE_PERIOD_SECONDS.'|max:'.MAX_STOP_GRACE_PERIOD_SECONDS,
         'rolling_update_drain_seconds' => 'integer|min:0|max:'.MAX_ROLLING_UPDATE_DRAIN_SECONDS,
+        'preview_deployments_limit' => 'nullable|integer|min:1|max:'.MAX_PREVIEW_DEPLOYMENTS_LIMIT,
         'docker_images_to_keep' => 'integer|min:0|max:100',
         'static_image' => Rule::enum(StaticImageTypes::class),
         'domains' => ValidationPatterns::applicationDomainRules(),
@@ -530,6 +531,7 @@ function removeUnnecessaryFieldsFromRequest(Request $request)
     $request->offsetUnset('is_pr_deployments_public_enabled');
     $request->offsetUnset('stop_grace_period');
     $request->offsetUnset('rolling_update_drain_seconds');
+    $request->offsetUnset('preview_deployments_limit');
     $request->offsetUnset('docker_images_to_keep');
     $request->offsetUnset('is_gzip_enabled');
     $request->offsetUnset('is_stripprefix_enabled');
