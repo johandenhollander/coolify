@@ -156,6 +156,16 @@ class ProcessGithubPullRequestWebhook implements ShouldBeEncrypted, ShouldQueue
             ->where('pull_request_id', $this->pullRequestId)
             ->first();
 
+        if (! $found && $application->hasReachedPreviewDeploymentsLimit()) {
+            Log::info('Skipped GitHub pull request preview deployment because the preview deployments limit is reached.', [
+                'application_uuid' => $application->uuid,
+                'pull_request_id' => $this->pullRequestId,
+                'preview_deployments_limit' => $application->settings->preview_deployments_limit,
+            ]);
+
+            return;
+        }
+
         if (! $found) {
             if ($application->build_pack === 'dockercompose') {
                 $preview = ApplicationPreview::create([

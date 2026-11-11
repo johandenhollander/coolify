@@ -153,3 +153,30 @@ it('continues to filter opened merge requests by target branch', function (strin
     $response->assertOk();
     expect(ApplicationPreview::where('application_id', $application->id)->exists())->toBeFalse();
 })->with(['app', 'manual']);
+
+it('skips a new merge request preview when the preview deployments limit is reached', function (string $endpoint) {
+    Queue::fake();
+
+    if ($endpoint === 'app') {
+        $gitlabApp = createGitlabMergeRequestWebhookSource();
+        $application = createGitlabMergeRequestWebhookApplication([
+            'repository_project_id' => 987654321,
+            'source_id' => $gitlabApp->id,
+            'source_type' => GitlabApp::class,
+        ]);
+        $headers = ['X-Gitlab-Token' => 'test-webhook-token'];
+        $url = '/webhooks/source/gitlab/events';
+    } else {
+        $application = createGitlabMergeRequestWebhookApplication();
+        $headers = ['X-Gitlab-Event' => 'Merge Request Hook', 'X-Gitlab-Token' => $application->manual_webhook_secret_gitlab];
+        $url = '/webhooks/source/gitlab/events/manual';
+    }
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'git_type' => 'gitlab']);
+
+    $response = $this->postJson($url, gitlabMergeRequestPayload('open', 'main'), $headers);
+
+    $response->assertOk();
+    expect($response->getContent())->toContain('Preview deployments limit reached (1).')
+        ->and(ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
+})->with(['app', 'manual']);

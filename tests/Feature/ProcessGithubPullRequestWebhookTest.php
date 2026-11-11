@@ -466,3 +466,39 @@ it('deploys an opened GitHub pull request preview by fork status, not by author 
     'fork with public deployments off' => [true, false, false],
     'fork with public deployments on' => [true, true, true],
 ]);
+
+it('skips a new GitHub pull request preview when the preview deployments limit is reached', function () {
+    Queue::fake();
+
+    $this->application->settings->update([
+        'is_preview_deployments_enabled' => true,
+        'preview_deployments_limit' => 1,
+    ]);
+    ApplicationPreview::create([
+        'application_id' => $this->application->id,
+        'pull_request_id' => 1,
+        'pull_request_html_url' => 'https://github.com/example/repo/pull/1',
+    ]);
+
+    Http::fake([
+        '*' => Http::response(['commit' => ['message' => 'feat: add feature'], 'files' => []]),
+    ]);
+
+    $job = new ProcessGithubPullRequestWebhook(
+        applicationId: $this->application->id,
+        githubAppId: null,
+        action: 'opened',
+        pullRequestId: 42,
+        pullRequestHtmlUrl: 'https://github.com/example/repo/pull/42',
+        pullRequestTitle: 'Add feature',
+        beforeSha: null,
+        afterSha: null,
+        commitSha: 'after-sha',
+        fullName: 'example/repo',
+    );
+
+    $job->handle();
+
+    expect(ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', 42)->exists())->toBeFalse()
+        ->and(ApplicationDeploymentQueue::where('application_id', $this->application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
+});

@@ -397,6 +397,17 @@ test('a static application keeps the port that the user set after turning on sta
         ->and($application->settings->is_static)->toBeTrue();
 });
 
+test('an application keeps its preview deployments limit', function () {
+    $this->application->settings->forceFill(['preview_deployments_limit' => 3])->save();
+    $bundle = $this->exporter->export($this->server);
+    $applicationUuid = $this->application->uuid;
+    removeTransferSourceResources($this);
+
+    $this->importer->import($bundle, teamId: Team::factory()->create()->id);
+
+    expect(Application::where('uuid', $applicationUuid)->firstOrFail()->settings->preview_deployments_limit)->toBe(3);
+});
+
 test('a swarm server gets only the destinations of the bundle', function () {
     $swarm = (new SwarmDocker)->forceFill(['uuid' => new_public_id(), 'name' => 'swarm', 'network' => 'swarm-overlay', 'server_id' => $this->server->id]);
     $swarm->saveQuietly();

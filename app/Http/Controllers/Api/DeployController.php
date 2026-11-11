@@ -453,6 +453,11 @@ class DeployController extends Controller
 
                             continue;
                         }
+                        if ($dockerTag !== null && ! $preview && $resource->hasReachedPreviewDeploymentsLimit()) {
+                            $deployments->push(['message' => $resource->previewDeploymentsLimitReachedMessage(), 'resource_uuid' => $uuid]);
+
+                            continue;
+                        }
                         $preview = $this->upsertDockerImagePreview($resource, $pr, $dockerTag, $preview);
                         $dockerTagForResource = $preview?->docker_registry_image_tag;
                     } else {

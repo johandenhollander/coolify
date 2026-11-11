@@ -101,6 +101,10 @@
                         ['value' => true, 'label' => 'Copy production value'],
                         ['value' => false, 'label' => 'Leave empty'],
                     ]" :disabled="! $canUpdate" />
+                <x-forms.input type="number" min="1" max="{{ MAX_PREVIEW_DEPLOYMENTS_LIMIT }}" id="previewDeploymentsLimit"
+                    label="Preview deployments limit" placeholder="No limit" wire:change="savePreviewDeploymentsLimit"
+                    helper="Maximum number of preview deployments that can exist at the same time. When the limit is reached, new pull requests get no preview until another preview is removed or its pull request is closed. Existing previews keep deploying. Saved automatically. Leave empty for no limit."
+                    canGate="update" :canResource="$application" />
             </div>
         </x-application.settings-section>
     @endif

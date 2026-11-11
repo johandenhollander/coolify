@@ -103,3 +103,55 @@ it('continues to filter opened pull requests by destination branch', function ()
     $response->assertOk();
     expect(ApplicationPreview::where('application_id', $application->id)->exists())->toBeFalse();
 });
+
+it('creates a preview for a new pull request when no preview deployments limit is set', function () {
+    Queue::fake();
+    $application = createBitbucketPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'git_type' => 'bitbucket']);
+
+    expect($application->settings->fresh()->preview_deployments_limit)->toBeNull();
+
+    sendBitbucketPullRequestWebhook($application, 'pullrequest:created', 'main')->assertOk();
+
+    expect(ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', 42)->exists())->toBeTrue();
+});
+
+it('skips a new pull request preview when the preview deployments limit is reached', function () {
+    Queue::fake();
+    $application = createBitbucketPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'git_type' => 'bitbucket']);
+
+    $response = sendBitbucketPullRequestWebhook($application, 'pullrequest:created', 'main');
+
+    $response->assertOk();
+    expect($response->getContent())->toContain('Preview deployments limit reached (1).')
+        ->and(ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', 42)->exists())->toBeFalse()
+        ->and($application->deployment_queue()->where('pull_request_id', 42)->exists())->toBeFalse();
+});
+
+it('keeps deploying an existing preview when the preview deployments limit is reached', function () {
+    Queue::fake();
+    $application = createBitbucketPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 42, 'pull_request_html_url' => '', 'git_type' => 'bitbucket']);
+
+    $response = sendBitbucketPullRequestWebhook($application, 'pullrequest:updated', 'main');
+
+    $response->assertOk();
+    expect($response->getContent())->toContain('Preview deployment queued.')
+        ->and($application->deployment_queue()->where('pull_request_id', 42)->exists())->toBeTrue();
+});
+
+it('frees a slot when the preview of a closed pull request is removed', function () {
+    Queue::fake();
+    $application = createBitbucketPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    $preview = ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'git_type' => 'bitbucket']);
+    $preview->delete();
+
+    sendBitbucketPullRequestWebhook($application, 'pullrequest:created', 'main')->assertOk();
+
+    expect(ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', 42)->exists())->toBeTrue();
+});

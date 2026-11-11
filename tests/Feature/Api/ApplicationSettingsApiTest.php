@@ -55,6 +55,7 @@ function recommendedApplicationSettingsPayload(): array
         'is_env_sorting_enabled' => true,
         'is_pr_deployments_public_enabled' => true,
         'use_production_values_in_previews' => false,
+        'preview_deployments_limit' => 4,
         'stop_grace_period' => 45,
         'rolling_update_drain_seconds' => 12,
         'docker_images_to_keep' => 7,
@@ -358,6 +359,30 @@ test('validates rolling update drain time bounds', function (int $seconds) {
     'below minimum' => -1,
     'above maximum' => 301,
 ]);
+
+test('validates preview deployments limit bounds', function (int $limit) {
+    $this->withHeaders(applicationSettingsApiHeaders($this->bearerToken))
+        ->patchJson("/api/v1/applications/{$this->application->uuid}", [
+            'preview_deployments_limit' => $limit,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('preview_deployments_limit');
+})->with([
+    'zero' => 0,
+    'above maximum' => 1001,
+]);
+
+test('clears the preview deployments limit with null', function () {
+    $this->application->settings->update(['preview_deployments_limit' => 4]);
+
+    $this->withHeaders(applicationSettingsApiHeaders($this->bearerToken))
+        ->patchJson("/api/v1/applications/{$this->application->uuid}", [
+            'preview_deployments_limit' => null,
+        ])
+        ->assertOk();
+
+    expect($this->application->fresh()->settings->preview_deployments_limit)->toBeNull();
+});
 
 test('validates Docker image retention bounds', function (int $dockerImagesToKeep) {
     $this->withHeaders(applicationSettingsApiHeaders($this->bearerToken))

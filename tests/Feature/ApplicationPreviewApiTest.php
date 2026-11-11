@@ -757,6 +757,31 @@ describe('POST /api/v1/applications/{uuid}/previews', function () {
             ->and($this->application->deployment_queue()->exists())->toBeFalse();
     });
 
+    test('rejects a new preview when the preview deployments limit is reached', function () {
+        $this->application->settings->update(['preview_deployments_limit' => 1]);
+        createPreview($this->application, 1);
+
+        $this->withHeaders(previewAuthHeaders($this->bearerToken))
+            ->postJson("/api/v1/applications/{$this->application->uuid}/previews", [
+                'pull_request_id' => 42,
+                'git_type' => 'github',
+            ])
+            ->assertStatus(409)
+            ->assertJsonPath('message', $this->application->fresh()->previewDeploymentsLimitReachedMessage());
+
+        expect(ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
+    });
+
+    test('redeploys an existing preview when the preview deployments limit is reached', function () {
+        $this->application->settings->update(['preview_deployments_limit' => 1]);
+        $preview = createPreview($this->application, 42);
+        $preview->update(['git_type' => 'github']);
+
+        $this->withHeaders(previewAuthHeaders($this->bearerToken))
+            ->postJson("/api/v1/applications/{$this->application->uuid}/previews", ['pull_request_id' => 42])
+            ->assertOk();
+    });
+
     test('returns 404 for an application of another team', function () {
         $otherTeam = Team::factory()->create();
         $otherUser = User::factory()->create();
@@ -783,5 +808,21 @@ describe('POST /api/v1/deploy with pull_request_id', function () {
             ->assertOk();
 
         expect($this->application->deployment_queue()->latest('id')->first()->git_type)->toBe('gitlab');
+    });
+
+    test('does not create a Docker Image preview when the preview deployments limit is reached', function () {
+        $this->application->update([
+            'build_pack' => 'dockerimage',
+            'docker_registry_image_name' => 'ghcr.io/example/app',
+            'docker_registry_image_tag' => 'latest',
+        ]);
+        $this->application->settings->update(['preview_deployments_limit' => 1]);
+        createPreview($this->application, 1);
+
+        $response = $this->withHeaders(previewAuthHeaders($this->bearerToken))
+            ->postJson('/api/v1/deploy', ['uuid' => $this->application->uuid, 'pull_request_id' => 42, 'docker_tag' => 'pr-42']);
+
+        expect($response->getContent())->toContain('Preview deployments limit reached (1).')
+            ->and(ApplicationPreview::where('application_id', $this->application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
     });
 });

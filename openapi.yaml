@@ -108,6 +108,14 @@ paths:
           description: 'Missing permissions. Opening or changing a preview needs the write permission.'
         '404':
           $ref: '#/components/responses/404'
+        '409':
+          description: 'Preview deployments limit of the application is reached.'
+          content:
+            application/json:
+              schema:
+                properties:
+                  message: { type: string }
+                type: object
         '422':
           $ref: '#/components/responses/422'
         '429':
@@ -569,6 +577,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -1020,6 +1034,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -1919,6 +1939,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -2307,6 +2333,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -2681,6 +2713,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -3235,6 +3273,12 @@ paths:
                 use_production_values_in_previews:
                   type: boolean
                   description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value. Default: true.'
+                preview_deployments_limit:
+                  type: integer
+                  nullable: true
+                  minimum: 1
+                  maximum: 1000
+                  description: 'Maximum number of preview deployments that can exist at the same time. New pull requests get no preview while the limit is reached. Null means no limit (default).'
                 stop_grace_period:
                   type: integer
                   nullable: true
@@ -18644,6 +18688,10 @@ components:
         use_production_values_in_previews:
           type: boolean
           description: 'Copy the value of a new production environment variable to its preview copy. When false, the preview copy is empty and previews do not get preview variables that still have the production value.'
+        preview_deployments_limit:
+          type: integer
+          nullable: true
+          description: 'Maximum number of preview deployments that can exist at the same time. Null means no limit.'
         use_build_secrets:
           type: boolean
         redact_all_env_values_in_logs:

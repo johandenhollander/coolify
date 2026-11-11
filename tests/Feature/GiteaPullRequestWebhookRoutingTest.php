@@ -104,3 +104,27 @@ it('continues to filter opened pull requests by base branch', function () {
     $response->assertOk();
     expect(ApplicationPreview::where('application_id', $application->id)->exists())->toBeFalse();
 });
+
+it('skips a new pull request preview when the preview deployments limit is reached', function () {
+    Queue::fake();
+    $application = createGiteaPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 1, 'pull_request_html_url' => '', 'git_type' => 'gitea']);
+
+    $response = sendGiteaPullRequestWebhook($application, 'opened', 'main');
+
+    $response->assertOk();
+    expect($response->getContent())->toContain('Preview deployments limit reached (1).')
+        ->and(ApplicationPreview::where('application_id', $application->id)->where('pull_request_id', 42)->exists())->toBeFalse();
+});
+
+it('keeps deploying an existing preview when the preview deployments limit is reached', function () {
+    Queue::fake();
+    $application = createGiteaPullRequestWebhookApplication();
+    $application->settings->update(['is_preview_deployments_enabled' => true, 'preview_deployments_limit' => 1]);
+    ApplicationPreview::create(['application_id' => $application->id, 'pull_request_id' => 42, 'pull_request_html_url' => '', 'git_type' => 'gitea']);
+
+    sendGiteaPullRequestWebhook($application, 'synchronized', 'main')->assertOk();
+
+    expect($application->deployment_queue()->where('pull_request_id', 42)->exists())->toBeTrue();
+});

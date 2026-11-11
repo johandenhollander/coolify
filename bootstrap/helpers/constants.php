@@ -71,6 +71,7 @@ const MAX_ROLLING_UPDATE_DRAIN_SECONDS = 300;
  * stopped or replaced container still ends with that container.
  */
 const CADDY_STREAM_CLOSE_DELAY = '24h';
+const MAX_PREVIEW_DEPLOYMENTS_LIMIT = 1000;
 
 const DATABASE_DOCKER_IMAGES = [
     'bitnami/mariadb',
