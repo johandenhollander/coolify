@@ -14,6 +14,7 @@ use App\Models\ApplicationPreview;
 use App\Services\ServerTransfer\TransferFinishChecklist;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class Bitbucket extends Controller
 {
@@ -38,19 +39,9 @@ class Bitbucket extends Controller
                 ]);
             }
             if ($x_bitbucket_event === 'repo:push') {
-                // A deleted branch has no "new" state, so no branch is found.
-                $branch = $this->webhookString(data_get($payload, 'push.changes.0.new.name'));
                 $full_name = data_get($payload, 'repository.full_name');
-                $commit = $this->webhookCommitSha($payload, 'push.changes.0.new.target.hash');
-                // Bitbucket webhooks ship up to 5 commits per change. Larger pushes
-                // are evaluated only on the visible 5.
-                $changes = data_get($payload, 'push.changes');
-                $skip_deploy_commits = self::shouldSkipDeploy(
-                    collect(is_array($changes) ? $changes : [])
-                        ->flatMap(fn (mixed $change): array => $this->webhookPushCommitMessages($change))
-                        ->values()
-                        ->all()
-                );
+                $pushed_branches = $this->bitbucketPushedBranches($payload);
+                $branch = $pushed_branches->keys()->first();
 
                 if (! $branch) {
                     return response([
@@ -86,7 +77,9 @@ class Bitbucket extends Controller
             // A redelivery of the same signed payload is one guess.
             $failure_attempt = $this->manualWebhookSignedPayloadAttempt($request, $x_bitbucket_token);
             $applications = Application::query();
-            if ($x_bitbucket_event !== 'pullrequest:rejected' && $x_bitbucket_event !== 'pullrequest:fulfilled') {
+            if ($x_bitbucket_event === 'repo:push') {
+                $applications->whereIn('git_branch', $pushed_branches->keys()->all());
+            } elseif ($x_bitbucket_event !== 'pullrequest:rejected' && $x_bitbucket_event !== 'pullrequest:fulfilled') {
                 $applications->where('git_branch', $branch);
             }
             $applications = $this->manualWebhookApplications($applications, $full_name);
@@ -145,8 +138,13 @@ class Bitbucket extends Controller
                     continue;
                 }
                 if ($x_bitbucket_event === 'repo:push') {
+                    $pushed_branch = $pushed_branches->get($application->git_branch);
+                    if ($pushed_branch === null) {
+                        continue;
+                    }
+                    $commit = $pushed_branch['commit'];
                     if ($application->isDeployable()) {
-                        if ($skip_deploy_commits ?? false) {
+                        if ($pushed_branch['skip_deploy']) {
                             $return_payloads->push([
                                 'application' => $application->name,
                                 'status' => 'skipped',
@@ -302,5 +300,42 @@ class Bitbucket extends Controller
         } catch (Exception $e) {
             return handleError($e);
         }
+    }
+
+    /**
+     * Branches of a repo:push event, keyed by branch name.
+     *
+     * One git push can update several branches. Bitbucket then sends a single
+     * repo:push event with one entry in push.changes per branch. A deleted
+     * branch has no "new" state and is left out, and so is a tag. When a
+     * branch appears twice, the first change wins.
+     *
+     * Bitbucket webhooks ship up to 5 commits per change. Larger pushes are
+     * evaluated only on the visible 5.
+     *
+     * @return Collection<string, array{commit: ?string, skip_deploy: bool}>
+     *
+     * @throws InvalidWebhookPayloadException
+     */
+    private function bitbucketPushedBranches(mixed $payload): Collection
+    {
+        $changes = data_get($payload, 'push.changes');
+        $branches = collect();
+        foreach (is_array($changes) ? $changes : [] as $index => $change) {
+            $type = data_get($change, 'new.type');
+            if ($type !== null && $type !== 'branch') {
+                continue;
+            }
+            $branch = $this->webhookString(data_get($change, 'new.name'));
+            if ($branch === null || $branches->has($branch)) {
+                continue;
+            }
+            $branches->put($branch, [
+                'commit' => $this->webhookCommitSha($payload, "push.changes.{$index}.new.target.hash"),
+                'skip_deploy' => self::shouldSkipDeploy($this->webhookPushCommitMessages($change)),
+            ]);
+        }
+
+        return $branches;
     }
 }
